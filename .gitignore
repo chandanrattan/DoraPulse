@@ -2,8 +2,20 @@
 .env
 .env.*
 !.env.template
+!.env.example
 backend/.env
 frontend/.env
+frontend/.env.*
+**/config.local.js
+**/*.local.env
+**/.env.local
+**/.env.*.local
+**/.env.development.local
+**/.env.test.local
+**/.env.production.local
+**/*.env
+!**/.env.template
+!**/.env.example
 
 # Python
 __pycache__/
