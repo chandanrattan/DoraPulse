@@ -1,0 +1,7 @@
+backend/.env
+node_modules/
+dist/
+frontend/node_modules/
+# Poetry/Conda
+backend/.venv/
+backend/__pycache__/

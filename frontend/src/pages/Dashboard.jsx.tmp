@@ -1,0 +1,195 @@
+import React, { useState, useEffect } from "react";
+import * as XLSX from "xlsx";
+import {
+  Container,
+  Grid,
+  Paper,
+  Typography,
+  CircularProgress,
+  Alert,
+  Button,
+} from "@mui/material";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
+
+const MetricCard = ({ title, value, unit }) => (
+  <Paper
+    sx={{
+      p: 3,
+      display: "flex",
+      flexDirection: "column",
+      height: 200,
+      justifyContent: "center",
+      alignItems: "center",
+    }}
+  >
+    <Typography variant="h6" gutterBottom>
+      {title}
+    </Typography>
+    <Typography variant="h3">
+      {typeof value === "number" ? value.toFixed(2) : "N/A"}
+    </Typography>
+    <Typography variant="body2" color="textSecondary">
+      {unit}
+    </Typography>
+  </Paper>
+);
+
+export default function Dashboard() {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const fetchExcel = async () => {
+    try {
+      const res = await fetch("/data/dora_metrics.xlsx");
+      if (!res.ok) {
+        throw new Error("Failed to fetch metrics data");
+      }
+      const buffer = await res.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: "buffer" });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const jsonData = XLSX.utils.sheet_to_json(sheet);
+      setData(jsonData[0]); // Get the first row as our current metrics
+      setError(null);
+    } catch (err) {
+      setError(err.message);
+      setData(null);
+    }
+  };
+
+  const handleGenerateClick = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch("http://127.0.0.1:8000/metrics/generate", {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("access_token")}`,
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || "Failed to generate metrics");
+      }
+
+      // Wait a moment for the file to be generated
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      await fetchExcel();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchExcel();
+  }, []);
+
+  if (loading) {
+    return (
+      <Container sx={{ mt: 4, textAlign: "center" }}>
+        <CircularProgress />
+        <Typography sx={{ mt: 2 }}>Generating metrics...</Typography>
+      </Container>
+    );
+  }
+
+  return (
+    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+      )}
+
+      <Button
+        variant="contained"
+        color="primary"
+        onClick={handleGenerateClick}
+        sx={{ mb: 3 }}
+        disabled={loading}
+      >
+        Generate New Metrics
+      </Button>
+
+      <Grid container spacing={3}>
+        <Grid item xs={12} md={6} lg={3}>
+          <MetricCard
+            title="Deployment Frequency"
+            value={data?.["Deployment Frequency"]}
+            unit="per day"
+          />
+        </Grid>
+        <Grid item xs={12} md={6} lg={3}>
+          <MetricCard
+            title="Lead Time"
+            value={data?.["Lead Time (hrs)"]}
+            unit="hours"
+          />
+        </Grid>
+        <Grid item xs={12} md={6} lg={3}>
+          <MetricCard
+            title="Mean Time to Recovery"
+            value={data?.["MTTR (hrs)"]}
+            unit="hours"
+          />
+        </Grid>
+        <Grid item xs={12} md={6} lg={3}>
+          <MetricCard
+            title="Change Failure Rate"
+            value={data?.["Change Failure Rate"]}
+            unit="%"
+          />
+        </Grid>
+
+        {data && (
+          <Grid item xs={12}>
+            <Paper sx={{ p: 3 }}>
+              <Typography variant="h6" gutterBottom>
+                Metrics Trend
+              </Typography>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart
+                  data={[
+                    {
+                      name: "Deployment Frequency",
+                      value: data["Deployment Frequency"],
+                    },
+                    {
+                      name: "Lead Time",
+                      value: data["Lead Time (hrs)"],
+                    },
+                    {
+                      name: "MTTR",
+                      value: data["MTTR (hrs)"],
+                    },
+                    {
+                      name: "Change Failure Rate",
+                      value: data["Change Failure Rate"],
+                    },
+                  ]}
+                  margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis />
+                  <Tooltip />
+                  <Bar dataKey="value" fill="#8884d8" />
+                </BarChart>
+              </ResponsiveContainer>
+            </Paper>
+          </Grid>
+        )}
+      </Grid>
+    </Container>
+  );
+}
