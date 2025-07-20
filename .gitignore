@@ -1,7 +1,88 @@
+# Environment files
+.env
+.env.*
+!.env.template
 backend/.env
-node_modules/
-dist/
-frontend/node_modules/
-# Poetry/Conda
-backend/.venv/
+frontend/.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
 backend/__pycache__/
+backend/**/__pycache__/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+.hypothesis/
+
+# Python Virtual Environments
+.venv/
+venv/
+ENV/
+backend/.venv/
+.conda/
+
+# Node.js
+node_modules/
+frontend/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Build outputs
+dist/
+build/
+frontend/dist/
+*.egg-info/
+
+# IDE - VSCode
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# IDE - JetBrains
+.idea/
+*.iml
+*.iws
+.idea_modules/
+
+# IDE - Eclipse
+.project
+.classpath
+.settings/
+
+# System files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Log files
+*.log
+logs/
+log/
+
+# Database
+*.sqlite
+*.sqlite3
+*.db
+
+# Excel files (except templates)
+*.xlsx
+*.xls
+!backend/data/dora_metrics.xlsx
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+frontend/**/*.tmp
