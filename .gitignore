@@ -22,15 +22,25 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.so
+*.pyd
+*.dll
 .Python
 backend/__pycache__/
 backend/**/__pycache__/
+frontend/**/__pycache__/
 .pytest_cache/
 .coverage
 htmlcov/
 .tox/
 .nox/
 .hypothesis/
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
+*.pyo
+*.pyc
 
 # Python Virtual Environments
 .venv/
