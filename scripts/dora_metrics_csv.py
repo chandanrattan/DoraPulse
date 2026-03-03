@@ -5,8 +5,10 @@ from __future__ import annotations
 
 import argparse
 import csv
+import http.client
 import math
 import os
+import socket
 import statistics
 import sys
 import time
@@ -49,27 +51,34 @@ class GitHubAPI:
         self.total_request_seconds = 0.0
         self.topic_search_pages = 0
 
-    def _request_url(self, url: str) -> Tuple[object, Dict[str, str]]:
-        req = urllib.request.Request(url)
-        req.add_header("Authorization", f"Bearer {self.token}")
-        req.add_header("Accept", "application/vnd.github+json")
-        req.add_header("X-GitHub-Api-Version", "2022-11-28")
+    def _request_url(self, url: str, max_retries: int = 4) -> Tuple[object, Dict[str, str]]:
+        for attempt in range(1, max_retries + 1):
+            req = urllib.request.Request(url)
+            req.add_header("Authorization", f"Bearer {self.token}")
+            req.add_header("Accept", "application/vnd.github+json")
+            req.add_header("X-GitHub-Api-Version", "2022-11-28")
 
-        started = time.perf_counter()
-        try:
-            with urllib.request.urlopen(req) as response:
-                import json
+            started = time.perf_counter()
+            try:
+                with urllib.request.urlopen(req, timeout=30) as response:
+                    import json
 
-                payload = json.loads(response.read().decode("utf-8"))
-                headers = {k.lower(): v for k, v in response.headers.items()}
-                self.request_count += 1
-                self.total_request_seconds += time.perf_counter() - started
-                return payload, headers
-        except urllib.error.HTTPError as exc:
-            body = exc.read().decode("utf-8", errors="ignore")
-            raise GitHubAPIError(f"GitHub API error {exc.code} for {url}: {body}") from exc
-        except urllib.error.URLError as exc:
-            raise GitHubAPIError(f"Network error while calling {url}: {exc}") from exc
+                    payload = json.loads(response.read().decode("utf-8"))
+                    headers = {k.lower(): v for k, v in response.headers.items()}
+                    self.request_count += 1
+                    self.total_request_seconds += time.perf_counter() - started
+                    return payload, headers
+            except urllib.error.HTTPError as exc:
+                body = exc.read().decode("utf-8", errors="ignore")
+                raise GitHubAPIError(f"GitHub API error {exc.code} for {url}: {body}") from exc
+            except (urllib.error.URLError, TimeoutError, socket.timeout, ConnectionResetError, http.client.IncompleteRead) as exc:
+                if attempt == max_retries:
+                    raise GitHubAPIError(f"Network error while calling {url}: {exc}") from exc
+                backoff = min(8, 2 ** (attempt - 1))
+                log_info(f"Transient network error ({exc}); retrying in {backoff}s [{attempt}/{max_retries}]")
+                time.sleep(backoff)
+
+        raise GitHubAPIError(f"Failed to fetch {url} after retries")
 
     def _request(self, path: str, params: Optional[Dict[str, str]] = None) -> Tuple[object, Dict[str, str]]:
         query = ""
@@ -160,16 +169,25 @@ class GitHubAPI:
 
         return repos
 
-    def fetch_closed_pull_requests(self, full_name: str) -> Iterable[Dict[str, object]]:
+    def fetch_closed_pull_requests(self, full_name: str, cutoff: Optional[datetime] = None) -> Iterable[Dict[str, object]]:
         next_url = f"{GITHUB_API_URL}/repos/{full_name}/pulls?state=closed&sort=updated&direction=desc&per_page=100&page=1"
 
         while next_url:
             payload, headers = self._request_url(next_url)
             if not isinstance(payload, list):
                 raise GitHubAPIError(f"Unexpected pull request response for {full_name}")
+            all_older_than_cutoff = True
             for pr in payload:
                 if isinstance(pr, dict):
+                    if cutoff:
+                        updated_at_raw = pr.get("updated_at")
+                        if isinstance(updated_at_raw, str):
+                            updated_at = parse_iso8601(updated_at_raw)
+                            if updated_at >= cutoff:
+                                all_older_than_cutoff = False
                     yield pr
+            if cutoff and all_older_than_cutoff:
+                break
             next_url = self._next_url_from_link_header(headers.get("link"))
 
     def estimate_closed_pr_count(self, full_name: str) -> int:
@@ -396,6 +414,7 @@ def main() -> int:
         parser.error("--estimate-sample-size must be greater than 0")
 
     api = GitHubAPI(token)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
     log_info(f"Mode: {'repo' if repo_full_name else 'topic'}")
     log_info(f"Days window: {days}")
     log_info(f"Output directory: {out_dir}")
@@ -445,7 +464,7 @@ def main() -> int:
         log_step(f"Fetching repository metadata for {repo}")
         api.get_repo(repo)
         log_step(f"Fetching closed pull requests for {repo}")
-        prs = api.fetch_closed_pull_requests(repo)
+        prs = api.fetch_closed_pull_requests(repo, cutoff=cutoff)
         metrics = calculate_repo_metrics(prs, days)
         metrics.repository = repo
         results.append(metrics)
