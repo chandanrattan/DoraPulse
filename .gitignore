@@ -108,3 +108,4 @@ log/
 *.temp
 .cache/
 frontend/**/*.tmp
+.env

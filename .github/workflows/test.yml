@@ -1,0 +1,24 @@
+name: Test Local Action
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-local-action:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Run local DoraPulse action
+        uses: ./
+        with:
+          token: ${{ secrets.PAT_TOKEN }}
+          owner: ${{ vars.REPO_OWNER }}
+          repo: ${{ vars.REPO_NAME }}
+          days: "30"
+          artifact_name: dora-metrics-pr-test

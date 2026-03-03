@@ -1,0 +1,97 @@
+name: DoraPulse Metrics CSV
+description: Calculate DORA metrics for a repository or topic and upload CSV artifacts.
+author: DoraPulse
+
+inputs:
+  token:
+    description: GitHub token with read access to target repositories.
+    required: true
+  owner:
+    description: Repository owner for single repository mode, or optional owner/org filter in topic mode.
+    required: false
+  repo:
+    description: Repository name for single repository mode.
+    required: false
+  topic:
+    description: GitHub topic to discover repositories.
+    required: false
+  days:
+    description: Rolling window in days.
+    required: false
+    default: "30"
+  artifact_name:
+    description: Uploaded artifact name.
+    required: false
+    default: dora-metrics-csv
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: "3.13"
+
+    - name: Install action dependencies
+      shell: bash
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install "${{ github.action_path }}"
+
+    - name: Validate inputs
+      shell: bash
+      env:
+        INPUT_OWNER: ${{ inputs.owner }}
+        INPUT_REPO: ${{ inputs.repo }}
+        INPUT_TOPIC: ${{ inputs.topic }}
+      run: |
+        if [[ -n "$INPUT_TOPIC" && -n "$INPUT_REPO" ]]; then
+          echo "Do not provide 'repo' in topic mode."
+          exit 1
+        fi
+
+        if [[ -n "$INPUT_TOPIC" ]]; then
+          exit 0
+        fi
+
+        if [[ -z "$INPUT_OWNER" || -z "$INPUT_REPO" ]]; then
+          echo "For single repository mode both 'owner' and 'repo' are required."
+          exit 1
+        fi
+
+    - name: Generate CSV
+      shell: bash
+      env:
+        GH_TOKEN_INPUT: ${{ inputs.token }}
+        INPUT_OWNER: ${{ inputs.owner }}
+        INPUT_REPO: ${{ inputs.repo }}
+        INPUT_TOPIC: ${{ inputs.topic }}
+        INPUT_DAYS: ${{ inputs.days }}
+      run: |
+        set -euo pipefail
+        mkdir -p artifacts
+
+        args=(
+          --token "$GH_TOKEN_INPUT"
+          --days "$INPUT_DAYS"
+          --out-dir artifacts
+        )
+
+        if [[ -n "$INPUT_OWNER" ]]; then
+          args+=(--owner "$INPUT_OWNER")
+        fi
+        if [[ -n "$INPUT_REPO" ]]; then
+          args+=(--repo "$INPUT_REPO")
+        fi
+        if [[ -n "$INPUT_TOPIC" ]]; then
+          args+=(--topic "$INPUT_TOPIC")
+        fi
+
+        python "${{ github.action_path }}/scripts/dora_metrics_csv.py" "${args[@]}"
+
+    - name: Upload CSV artifact
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ inputs.artifact_name }}
+        path: artifacts/*.csv
+        if-no-files-found: error
