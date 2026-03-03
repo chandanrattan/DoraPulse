@@ -1,0 +1,60 @@
+name: Release Major Tag
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      version_tag:
+        description: "Semantic version tag like v1.2.3"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  update-major-tag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve version input
+        id: version
+        shell: bash
+        env:
+          INPUT_TAG: ${{ inputs.version_tag }}
+          REF_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          TAG="${INPUT_TAG:-$REF_TAG}"
+
+          if [[ ! "$TAG" =~ ^v([0-9]+)\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Tag '$TAG' is not a supported semantic tag (expected v<major>.<minor>.<patch>)."
+            exit 1
+          fi
+
+          MAJOR="v${BASH_REMATCH[1]}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "major=$MAJOR" >> "$GITHUB_OUTPUT"
+
+      - name: Move major tag to release tag commit
+        shell: bash
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          MAJOR: ${{ steps.version.outputs.major }}
+        run: |
+          set -euo pipefail
+          SHA="$(git rev-list -n 1 "$TAG")"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git tag -f -a "$MAJOR" "$SHA" -m "Update $MAJOR to $TAG"
+          git push origin "refs/tags/$MAJOR" --force
+
+          echo "Moved $MAJOR -> $TAG ($SHA)"

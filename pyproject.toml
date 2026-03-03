@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "dorapulse-composite-action"
+version = "0.1.0"
+description = "GitHub Composite Action to calculate DORA metrics and export CSV artifacts."
+authors = ["DoraPulse"]
+license = "Apache-2.0"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.11,<3.14"
+python-dotenv = "^1.0.1"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.0"
+ruff = "^0.8.0"
+black = "^24.10.0"
+
+[build-system]
+requires = ["poetry-core>=1.9.0"]
+build-backend = "poetry.core.masonry.api"
