@@ -1,0 +1,77 @@
+name: Bug report
+description: Report a reproducible problem with the DoraPulse action or script.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug. Please include enough detail so we can reproduce and fix it quickly.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What went wrong?
+      placeholder: A clear and concise description of the problem.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Share exact steps, inputs, and environment details.
+      placeholder: |
+        1. Use workflow/action config:
+        2. Run with these inputs:
+        3. Observe error:
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and error output
+      description: Paste the relevant job logs or stack trace.
+      render: shell
+    validations:
+      required: true
+
+  - type: input
+    id: action_version
+    attributes:
+      label: Action version
+      description: Tag/SHA used in `uses:` (for example `v1`, `v1.2.0`, or commit SHA).
+      placeholder: v1
+    validations:
+      required: true
+
+  - type: input
+    id: runner
+    attributes:
+      label: Runner environment
+      description: GitHub runner OS/version or local environment.
+      placeholder: ubuntu-latest / local Windows 11 + Python 3.13
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues and this is not a duplicate.
+          required: true
+        - label: I removed secrets/tokens from logs and screenshots.
+          required: true
+

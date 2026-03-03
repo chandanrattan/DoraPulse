@@ -1,6 +1,9 @@
 name: DoraPulse Metrics CSV
 description: Calculate DORA metrics for a repository or topic and upload CSV artifacts.
 author: DoraPulse
+branding:
+  icon: bar-chart-2
+  color: blue
 
 inputs:
   token:

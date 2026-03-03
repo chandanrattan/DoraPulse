@@ -1,0 +1,62 @@
+name: Feature request
+description: Suggest an enhancement for the DoraPulse action or metrics workflow.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for sharing an idea. Well-scoped requests are easier to prioritize and implement.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What problem are you trying to solve?
+      placeholder: As a user, I want...
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the change you want.
+      placeholder: Add a new input/output/workflow behavior...
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches you considered.
+      placeholder: Existing workaround, other tools, etc.
+    validations:
+      required: false
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact and use case
+      description: Who benefits and how often this is needed.
+    validations:
+      required: true
+
+  - type: input
+    id: action_version
+    attributes:
+      label: Current action version (if applicable)
+      placeholder: v1
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues and this request is not a duplicate.
+          required: true
+
