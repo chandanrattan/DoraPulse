@@ -186,12 +186,26 @@ class GitHubAPI:
     def discover_owner_repositories_by_topic(self, owner: str, owner_qualifier: str, topic: str) -> List[str]:
         repositories = self.list_repositories_for_owner(owner, owner_qualifier)
         if not repositories:
+            log_info(f"Fallback scan summary: owner='{owner}', scanned=0, with_topics=0, matches=0")
             return []
 
         matched: List[str] = []
+        with_topics = 0
         for full_name in repositories:
-            if self.repository_has_topic(full_name, topic):
+            payload, _ = self._request(f"/repos/{full_name}/topics")
+            if not isinstance(payload, dict):
+                raise GitHubAPIError(f"Unexpected topics response for {full_name}")
+            names = payload.get("names", [])
+            if not isinstance(names, list):
+                continue
+            if names:
+                with_topics += 1
+            wanted = topic.lower()
+            if any(isinstance(item, str) and item.lower() == wanted for item in names):
                 matched.append(full_name)
+        log_info(
+            f"Fallback scan summary: owner='{owner}', scanned={len(repositories)}, with_topics={with_topics}, matches={len(matched)}"
+        )
         return matched
 
     def search_repositories_by_topic(
