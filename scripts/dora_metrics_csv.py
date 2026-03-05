@@ -127,10 +127,20 @@ class GitHubAPI:
             raise GitHubAPIError(f"Unexpected repo response for {full_name}")
         return payload
 
+    def get_owner_type(self, owner: str) -> str:
+        payload, _ = self._request(f"/users/{owner}")
+        if not isinstance(payload, dict):
+            raise GitHubAPIError(f"Unexpected owner response for {owner}")
+        owner_type = payload.get("type")
+        if owner_type == "Organization":
+            return "org"
+        return "user"
+
     def search_repositories_by_topic(self, topic: str, owner: Optional[str]) -> List[str]:
         q_parts = [f"topic:{topic}", "archived:false"]
         if owner:
-            q_parts.append(f"user:{owner}")
+            owner_qualifier = self.get_owner_type(owner)
+            q_parts.append(f"{owner_qualifier}:{owner}")
 
         repos: List[str] = []
         page = 1
