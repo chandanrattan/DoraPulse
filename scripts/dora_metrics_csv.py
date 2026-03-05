@@ -136,48 +136,78 @@ class GitHubAPI:
             return "org"
         return "user"
 
-    def search_repositories_by_topic(self, topic: str, owner: Optional[str]) -> List[str]:
-        q_parts = [f"topic:{topic}", "archived:false"]
+    def search_repositories_by_topic(
+        self,
+        topic: str,
+        owner: Optional[str],
+        owner_qualifier: Optional[str] = None,
+    ) -> List[str]:
+        topic = topic.strip()
+        owner = owner.strip() if owner else None
+
+        base_parts = [f"topic:{topic}", "archived:false"]
+        qualifiers: List[str] = [""]
         if owner:
-            owner_qualifier = self.get_owner_type(owner)
-            q_parts.append(f"{owner_qualifier}:{owner}")
+            primary = owner_qualifier or self.get_owner_type(owner)
+            secondary = "org" if primary == "user" else "user"
+            qualifiers = [f"{primary}:{owner}", f"{secondary}:{owner}"]
 
-        repos: List[str] = []
-        page = 1
-        per_page = 100
+        last_error: Optional[GitHubAPIError] = None
+        for qualifier in qualifiers:
+            q_parts = list(base_parts)
+            if qualifier:
+                q_parts.append(qualifier)
+            query_text = " ".join(q_parts)
 
-        self.topic_search_pages = 0
-        while True:
-            payload, _ = self._request(
-                "/search/repositories",
-                {
-                    "q": " ".join(q_parts),
-                    "sort": "updated",
-                    "order": "desc",
-                    "page": str(page),
-                    "per_page": str(per_page),
-                },
-            )
+            repos: List[str] = []
+            page = 1
+            per_page = 100
+            self.topic_search_pages = 0
 
-            if not isinstance(payload, dict):
-                raise GitHubAPIError("Unexpected search response")
-            items = payload.get("items", [])
-            if not isinstance(items, list) or not items:
-                break
+            try:
+                while True:
+                    payload, _ = self._request(
+                        "/search/repositories",
+                        {
+                            "q": query_text,
+                            "sort": "updated",
+                            "order": "desc",
+                            "page": str(page),
+                            "per_page": str(per_page),
+                        },
+                    )
 
-            for item in items:
-                if not isinstance(item, dict):
-                    continue
-                name = item.get("full_name")
-                if isinstance(name, str):
-                    repos.append(name)
-            self.topic_search_pages += 1
+                    if not isinstance(payload, dict):
+                        raise GitHubAPIError("Unexpected search response")
+                    items = payload.get("items", [])
+                    if not isinstance(items, list) or not items:
+                        break
 
-            if len(items) < per_page:
-                break
-            page += 1
+                    for item in items:
+                        if not isinstance(item, dict):
+                            continue
+                        name = item.get("full_name")
+                        if isinstance(name, str):
+                            repos.append(name)
+                    self.topic_search_pages += 1
 
-        return repos
+                    if len(items) < per_page:
+                        break
+                    page += 1
+                return repos
+            except GitHubAPIError as exc:
+                last_error = exc
+                if "GitHub API error 422" not in str(exc):
+                    raise
+                if not owner:
+                    raise
+                continue
+
+        if last_error:
+            raise GitHubAPIError(
+                f"{last_error}. Attempted topic search with owner '{owner}' using both org/user qualifiers."
+            ) from last_error
+        return []
 
     def fetch_closed_pull_requests(self, full_name: str, cutoff: Optional[datetime] = None) -> Iterable[Dict[str, object]]:
         next_url = f"{GITHUB_API_URL}/repos/{full_name}/pulls?state=closed&sort=updated&direction=desc&per_page=100&page=1"
@@ -397,9 +427,12 @@ def main() -> int:
         or os.getenv("DORA_GITHUB_TOKEN")
         or os.getenv("GITHUB_TOKEN")
     )
-    owner = args.owner or os.getenv("DORA_OWNER")
-    repo = args.repo or os.getenv("DORA_REPO")
-    topic = args.topic or os.getenv("DORA_TOPIC")
+    owner_raw = args.owner or os.getenv("DORA_OWNER")
+    repo_raw = args.repo or os.getenv("DORA_REPO")
+    topic_raw = args.topic or os.getenv("DORA_TOPIC")
+    owner = owner_raw.strip() if owner_raw else None
+    repo = repo_raw.strip() if repo_raw else None
+    topic = topic_raw.strip() if topic_raw else None
     out_dir = args.out_dir or os.getenv("DORA_OUT_DIR") or "artifacts"
     repo_full_name = f"{owner}/{repo}" if owner and repo else None
 
@@ -433,8 +466,18 @@ def main() -> int:
         repositories = [repo_full_name]
         log_step(f"Using single repository: {repo_full_name}")
     else:
+        owner_qualifier: Optional[str] = None
+        if owner:
+            log_step(f"Validating owner '{owner}'")
+            try:
+                owner_qualifier = api.get_owner_type(owner)
+            except GitHubAPIError as exc:
+                raise GitHubAPIError(
+                    f"Owner validation failed for '{owner}'. Confirm the exact owner login/slug and token visibility. Underlying error: {exc}"
+                ) from exc
+            log_done(f"Owner '{owner}' validated as type '{owner_qualifier}'")
         log_step(f"Searching repositories for topic='{topic}' owner='{owner or '*'}'")
-        repositories = api.search_repositories_by_topic(topic, owner)
+        repositories = api.search_repositories_by_topic(topic, owner, owner_qualifier=owner_qualifier)
         log_done(f"Found {len(repositories)} repositories across {api.topic_search_pages} search page(s)")
 
     if not repositories:
