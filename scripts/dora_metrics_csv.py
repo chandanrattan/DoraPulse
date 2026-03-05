@@ -136,6 +136,64 @@ class GitHubAPI:
             return "org"
         return "user"
 
+    def list_repositories_for_owner(self, owner: str, owner_qualifier: str) -> List[str]:
+        if owner_qualifier == "org":
+            path = f"/orgs/{owner}/repos"
+        else:
+            path = f"/users/{owner}/repos"
+
+        repos: List[str] = []
+        page = 1
+        per_page = 100
+        while True:
+            payload, _ = self._request(
+                path,
+                {
+                    "type": "all",
+                    "sort": "updated",
+                    "direction": "desc",
+                    "page": str(page),
+                    "per_page": str(per_page),
+                },
+            )
+            if not isinstance(payload, list):
+                raise GitHubAPIError(f"Unexpected owner repositories response for {owner}")
+            if not payload:
+                break
+
+            for repo in payload:
+                if not isinstance(repo, dict):
+                    continue
+                full_name = repo.get("full_name")
+                if isinstance(full_name, str):
+                    repos.append(full_name)
+
+            if len(payload) < per_page:
+                break
+            page += 1
+        return repos
+
+    def repository_has_topic(self, full_name: str, topic: str) -> bool:
+        payload, _ = self._request(f"/repos/{full_name}/topics")
+        if not isinstance(payload, dict):
+            raise GitHubAPIError(f"Unexpected topics response for {full_name}")
+        names = payload.get("names", [])
+        if not isinstance(names, list):
+            return False
+        wanted = topic.lower()
+        return any(isinstance(item, str) and item.lower() == wanted for item in names)
+
+    def discover_owner_repositories_by_topic(self, owner: str, owner_qualifier: str, topic: str) -> List[str]:
+        repositories = self.list_repositories_for_owner(owner, owner_qualifier)
+        if not repositories:
+            return []
+
+        matched: List[str] = []
+        for full_name in repositories:
+            if self.repository_has_topic(full_name, topic):
+                matched.append(full_name)
+        return matched
+
     def search_repositories_by_topic(
         self,
         topic: str,
@@ -149,8 +207,7 @@ class GitHubAPI:
         qualifiers: List[str] = [""]
         if owner:
             primary = owner_qualifier or self.get_owner_type(owner)
-            secondary = "org" if primary == "user" else "user"
-            qualifiers = [f"{primary}:{owner}", f"{secondary}:{owner}"]
+            qualifiers = [f"{primary}:{owner}"]
 
         last_error: Optional[GitHubAPIError] = None
         for qualifier in qualifiers:
@@ -201,7 +258,12 @@ class GitHubAPI:
                     raise
                 if not owner:
                     raise
-                continue
+                if not owner_qualifier:
+                    owner_qualifier = self.get_owner_type(owner)
+                log_info(
+                    f"Search API rejected query for owner '{owner}'. Falling back to owner repository listing and topic filtering."
+                )
+                return self.discover_owner_repositories_by_topic(owner, owner_qualifier, topic)
 
         if last_error:
             raise GitHubAPIError(
