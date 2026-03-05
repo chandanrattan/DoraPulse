@@ -57,6 +57,7 @@ class GitHubAPI:
             req.add_header("Authorization", f"Bearer {self.token}")
             req.add_header("Accept", "application/vnd.github+json")
             req.add_header("X-GitHub-Api-Version", "2022-11-28")
+            log_step(f"🌐 API [{attempt}/{max_retries}]: {url}")
 
             started = time.perf_counter()
             try:
@@ -517,6 +518,13 @@ def main() -> int:
         parser.error("--estimate-seconds-per-request must be greater than 0")
     if args.estimate_sample_size <= 0:
         parser.error("--estimate-sample-size must be greater than 0")
+
+    token_preview = f"{token[:4]}...{token[-4:]}" if len(token) >= 8 else "***"
+    log_info(
+        "🧾 Inputs: "
+        f"owner='{owner or ''}', repo='{repo or ''}', topic='{topic or ''}', "
+        f"days={days}, out_dir='{out_dir}', estimate_only={args.estimate_only}, token='{token_preview}'"
+    )
 
     api = GitHubAPI(token)
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
