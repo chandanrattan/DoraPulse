@@ -96,7 +96,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Run DoraPulse
-        uses: chandanrattan/DoraPulse@main
+        uses: chandanrattan/DoraPulse@v1
         with:
           token: ${{ secrets.TOKEN }}
           owner: my-org
@@ -118,7 +118,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Run DoraPulse
-        uses: chandanrattan/DoraPulse@main
+        uses: chandanrattan/DoraPulse@v1
         with:
           token: ${{ secrets.TOKEN }}
           topic: microservice
