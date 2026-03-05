@@ -57,7 +57,6 @@ class GitHubAPI:
             req.add_header("Authorization", f"Bearer {self.token}")
             req.add_header("Accept", "application/vnd.github+json")
             req.add_header("X-GitHub-Api-Version", "2022-11-28")
-            log_step(f"🌐 API [{attempt}/{max_retries}]: {url}")
 
             started = time.perf_counter()
             try:
@@ -204,73 +203,57 @@ class GitHubAPI:
         topic = topic.strip()
         owner = owner.strip() if owner else None
 
-        base_parts = [f"topic:{topic}", "archived:false"]
-        qualifiers: List[str] = [""]
         if owner:
-            primary = owner_qualifier or self.get_owner_type(owner)
-            qualifiers = [f"{primary}:{owner}"]
+            qualifier = owner_qualifier or self.get_owner_type(owner)
+            query_text = f"{qualifier}:{owner} topic:{topic} fork:true archived:false"
+        else:
+            query_text = f"topic:{topic} fork:true archived:false"
 
-        last_error: Optional[GitHubAPIError] = None
-        for qualifier in qualifiers:
-            q_parts = list(base_parts)
-            if qualifier:
-                q_parts.append(qualifier)
-            query_text = " ".join(q_parts)
+        repos: List[str] = []
+        page = 1
+        per_page = 100
+        self.topic_search_pages = 0
 
-            repos: List[str] = []
-            page = 1
-            per_page = 100
-            self.topic_search_pages = 0
-
-            try:
-                while True:
-                    payload, _ = self._request(
-                        "/search/repositories",
-                        {
-                            "q": query_text,
-                            "sort": "updated",
-                            "order": "desc",
-                            "page": str(page),
-                            "per_page": str(per_page),
-                        },
-                    )
-
-                    if not isinstance(payload, dict):
-                        raise GitHubAPIError("Unexpected search response")
-                    items = payload.get("items", [])
-                    if not isinstance(items, list) or not items:
-                        break
-
-                    for item in items:
-                        if not isinstance(item, dict):
-                            continue
-                        name = item.get("full_name")
-                        if isinstance(name, str):
-                            repos.append(name)
-                    self.topic_search_pages += 1
-
-                    if len(items) < per_page:
-                        break
-                    page += 1
-                return repos
-            except GitHubAPIError as exc:
-                last_error = exc
-                if "GitHub API error 422" not in str(exc):
-                    raise
-                if not owner:
-                    raise
-                if not owner_qualifier:
-                    owner_qualifier = self.get_owner_type(owner)
-                log_info(
-                    f"Search API rejected query for owner '{owner}'. Falling back to owner repository listing and topic filtering."
+        try:
+            while True:
+                payload, _ = self._request(
+                    "/search/repositories",
+                    {
+                        "q": query_text,
+                        "sort": "updated",
+                        "order": "desc",
+                        "page": str(page),
+                        "per_page": str(per_page),
+                    },
                 )
-                return self.discover_owner_repositories_by_topic(owner, owner_qualifier, topic)
 
-        if last_error:
-            raise GitHubAPIError(
-                f"{last_error}. Attempted topic search with owner '{owner}' using both org/user qualifiers."
-            ) from last_error
-        return []
+                if not isinstance(payload, dict):
+                    raise GitHubAPIError("Unexpected search response")
+                items = payload.get("items", [])
+                if not isinstance(items, list) or not items:
+                    break
+
+                for item in items:
+                    if not isinstance(item, dict):
+                        continue
+                    name = item.get("full_name")
+                    if isinstance(name, str):
+                        repos.append(name)
+                self.topic_search_pages += 1
+
+                if len(items) < per_page:
+                    break
+                page += 1
+            return repos
+        except GitHubAPIError as exc:
+            if "GitHub API error 422" not in str(exc) or not owner:
+                raise
+            if not owner_qualifier:
+                owner_qualifier = self.get_owner_type(owner)
+            log_info(
+                f"Search API rejected query for owner '{owner}'. Falling back to owner repository listing and topic filtering."
+            )
+            return self.discover_owner_repositories_by_topic(owner, owner_qualifier, topic)
 
     def fetch_closed_pull_requests(self, full_name: str, cutoff: Optional[datetime] = None) -> Iterable[Dict[str, object]]:
         next_url = f"{GITHUB_API_URL}/repos/{full_name}/pulls?state=closed&sort=updated&direction=desc&per_page=100&page=1"
@@ -548,10 +531,15 @@ def main() -> int:
             log_done(f"Owner '{owner}' validated as type '{owner_qualifier}'")
         log_step(f"Searching repositories for topic='{topic}' owner='{owner or '*'}'")
         repositories = api.search_repositories_by_topic(topic, owner, owner_qualifier=owner_qualifier)
+        if not repositories:
+            raise GitHubAPIError(
+                f"No repositories found for topic='{topic}' owner='{owner or '*'}' "
+                f"(search_pages={api.topic_search_pages})."
+            )
         log_done(f"Found {len(repositories)} repositories across {api.topic_search_pages} search page(s)")
 
     if not repositories:
-        raise GitHubAPIError("No repositories found for the provided input")
+        raise GitHubAPIError("No repositories found for the provided input.")
 
     sample_size = min(len(repositories), args.estimate_sample_size)
     sample_repos = repositories[:sample_size]
